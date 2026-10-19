@@ -919,7 +919,7 @@
   const manageEl = $("tkManage"), selBar = $("tkSelBar"), selAll = $("tkSelAll"),
         selCount = $("tkSelCount"), selDel = $("tkSelDel");
 
-  /* 최근 저장한 용지 1장만 펼쳐 두고 나머지는 버튼으로 여닫는다 */
+  /* 최근 저장한 용지와 같은 회차는 모두 펼쳐 두고 나머지는 버튼으로 여닫는다 */
   let expanded = false, restCount = 0, restWins = 0;
   /* 체크 삭제 모드 */
   let selectMode = false, expandedBefore = false;
@@ -1004,14 +1004,15 @@
 
     let waiting = 0, offline = 0, checked = 0, best = 0, wins = 0;
     const newest = newestOf(tickets);
-    restCount = Math.max(0, tickets.length - 1);
+    const pinnedRound = newest ? newest.round : null;
+    restCount = tickets.filter((t) => t.round !== pinnedRound).length;
     restWins = 0;
 
     for (const t of tickets) {
       const st = stateOf(t.round);
       const draw = await getDraw(t.round);
       if (seq !== renderSeq) return; // 더 최신 렌더가 시작됨
-      const pinned = t === newest;
+      const pinned = t.round === pinnedRound;
 
       const li = document.createElement("li");
       li.className = "tk-item" + (pinned ? " pinned" : "");
@@ -1025,7 +1026,7 @@
       bd.className = "tk-badge " + st.key;
       bd.textContent = st.label;
       head.append(rd, bd);
-      if (pinned && tickets.length > 1) {
+      if (t === newest && tickets.length > 1) {
         const rc = document.createElement("span");
         rc.className = "tk-badge recent";
         rc.textContent = "최근 저장";
