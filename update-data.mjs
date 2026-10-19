@@ -17,10 +17,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 사이트가 일시적으로 연결을 끊거나 JSON 대신 HTML(점검·오류 페이지)을 돌려줄 때가 있어 재시도
 const RETRY_DELAYS = [3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 60_000, 120_000];
+// 서버 앞단이 새 연결 일부를 응답 없이 버리므로(정상 연결은 수십 ms), 오래 기다리지 말고 끊고 재시도
+const HEADER_TIMEOUT = 3_000;
+const BODY_TIMEOUT = 30_000;
 
 const fetchListOnce = async (url) => {
-  const res = await fetch(url, { headers: HDRS, signal: AbortSignal.timeout(30_000) });
-  const text = await res.text();
+  const ctrl = new AbortController();
+  let timer = setTimeout(() => ctrl.abort(new Error(`응답 헤더 대기 ${HEADER_TIMEOUT / 1000}초 초과`)), HEADER_TIMEOUT);
+  let res, text;
+  try {
+    res = await fetch(url, { headers: HDRS, signal: ctrl.signal });
+    clearTimeout(timer);
+    timer = setTimeout(() => ctrl.abort(new Error(`본문 수신 ${BODY_TIMEOUT / 1000}초 초과`)), BODY_TIMEOUT);
+    text = await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}\n${text.slice(0, 300)}`);
   try {
     return JSON.parse(text)?.data?.list ?? [];
