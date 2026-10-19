@@ -15,12 +15,32 @@ const BASE = "https://www.dhlottery.co.kr/lt645/selectPstLt645InfoNew.do";
 const HDRS = { "User-Agent": "Mozilla/5.0", Referer: "https://www.dhlottery.co.kr/lt645/result" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 사이트가 일시적으로 연결을 끊거나 JSON 대신 HTML(점검·오류 페이지)을 돌려줄 때가 있어 재시도
+const RETRY_DELAYS = [3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 60_000, 120_000];
+
+const fetchListOnce = async (url) => {
+  const res = await fetch(url, { headers: HDRS, signal: AbortSignal.timeout(30_000) });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}\n${text.slice(0, 300)}`);
+  try {
+    return JSON.parse(text)?.data?.list ?? [];
+  } catch {
+    throw new Error(`JSON 아님 (${res.headers.get("content-type")}): ${url}\n${text.slice(0, 300)}`);
+  }
+};
+
 const fetchList = async (params) => {
   const url = `${BASE}?${new URLSearchParams(params)}`;
-  const res = await fetch(url, { headers: HDRS });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
-  const json = await res.json();
-  return json?.data?.list ?? [];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchListOnce(url);
+    } catch (e) {
+      if (attempt >= RETRY_DELAYS.length) throw e;
+      const wait = RETRY_DELAYS[attempt];
+      console.warn(`요청 실패 (${attempt + 1}/${RETRY_DELAYS.length + 1}), ${wait / 1000}초 후 재시도: ${e.cause?.message ?? e.message}`);
+      await sleep(wait);
+    }
+  }
 };
 
 const toDraw = (x) => ({
